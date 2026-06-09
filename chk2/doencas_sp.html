@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dengue · Chikungunya · Zika — São Paulo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg0:#ffffff;
+  --bg1:#fffcf8;
+  --bg2:#fdeede;
+  --b0:rgba(160,80,10,.07);
+  --b1:rgba(160,80,10,.15);
+  --b2:rgba(160,80,10,.30);
+  --t0:#1a1208;
+  --t1:#5a3c20;
+  --t2:#a07850;
+  --acc:#ea580c;
+  --r:8px;--rl:12px;
+}
+html,body{height:100%;background:var(--bg2);font-family:'IBM Plex Mono',monospace;-webkit-font-smoothing:antialiased}
+body{display:flex;align-items:center;justify-content:center;padding:14px;min-height:100%}
+#app{
+  width:100%;max-width:1360px;
+  height:calc(100vh - 28px);min-height:580px;max-height:960px;
+  display:grid;grid-template-rows:42px 1fr;
+  border:.5px solid var(--b0);border-radius:var(--rl);overflow:hidden;
+  background:var(--bg0);box-shadow:0 2px 32px rgba(0,0,0,.1);
+}
+/* header */
+.hdr{display:flex;align-items:center;gap:10px;padding:0 16px;
+     background:var(--bg1);border-bottom:.5px solid var(--b0);flex-shrink:0}
+.hdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .2s}
+.ht{font-size:11px;letter-spacing:.13em;color:var(--t1);font-weight:500}
+.hb{margin-left:auto;font-size:9px;color:var(--t2);letter-spacing:.08em}
+/* body */
+.body{display:grid;grid-template-columns:360px 1fr;overflow:hidden;min-height:0}
+/* ── LEFT ── */
+.left{display:flex;flex-direction:column;border-right:.5px solid var(--b0);overflow:hidden;min-height:0;background:var(--bg1)}
+/* region chips */
+.rgbar{padding:9px 10px 7px;border-bottom:.5px solid var(--b0);flex-shrink:0}
+.rglbl{display:block;font-size:7px;letter-spacing:.18em;color:var(--t2);margin-bottom:6px}
+.rgcs{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
+.rgc{
+  font-family:inherit;font-size:8px;letter-spacing:.05em;padding:3px 0;
+  border-radius:3px;cursor:pointer;border:.5px solid var(--b0);
+  color:var(--t2);background:transparent;text-align:center;
+  transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rgc.a{background:#fff7ed;border-color:var(--acc);color:var(--acc);font-weight:500}
+.rgc:hover:not(.a){border-color:var(--b1);color:var(--t1)}
+/* search */
+.srch{padding:9px 10px;border-bottom:.5px solid var(--b0);position:relative;z-index:20;flex-shrink:0}
+.slbl{display:block;font-size:7px;letter-spacing:.18em;color:var(--t2);margin-bottom:4px}
+.srch input{width:100%;font-family:inherit;font-size:12px;background:var(--bg0);
+  color:var(--t0);border:.5px solid var(--b1);border-radius:var(--r);
+  padding:6px 10px;outline:none;transition:border-color .15s}
+.srch input:focus{border-color:var(--acc)}
+.srch input::placeholder{color:var(--t2)}
+.dd{position:absolute;left:10px;right:10px;top:calc(100% + 1px);background:var(--bg0);
+    border:.5px solid var(--b1);border-radius:var(--r);max-height:190px;overflow-y:auto;
+    display:none;z-index:30;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+.dd.o{display:block}
+.ddi{padding:5px 10px;font-size:11px;color:var(--t1);cursor:pointer;
+     border-bottom:.5px solid var(--b0);display:flex;justify-content:space-between;align-items:center}
+.ddi:last-child{border-bottom:none}
+.ddi:hover{background:#fff7ed;color:var(--t0)}
+.ddi-rg{font-size:8px;color:var(--t2);flex-shrink:0;margin-left:6px}
+/* stats */
+.sc{display:none;flex-shrink:0;border-bottom:.5px solid var(--b0)}
+.sc.o{display:grid;grid-template-columns:1fr 1fr}
+.sv{padding:6px 10px;border-right:.5px solid var(--b0);border-bottom:.5px solid var(--b0)}
+.sv:nth-child(2n){border-right:none}
+.sv:nth-child(3),.sv:nth-child(4){border-bottom:none}
+.svl{font-size:7px;letter-spacing:.17em;color:var(--t2);margin-bottom:2px}
+.svv{font-size:13px;font-weight:500;transition:color .2s}
+/* map */
+.mw{flex:1;min-height:0;position:relative;overflow:hidden;background:#fef3e2}
+#msv{width:100%;height:100%;display:block}
+.mpl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+     font-size:8px;letter-spacing:.2em;color:#d4a070}
+.mtg{display:none;position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+     background:rgba(255,247,237,.96);border:.5px solid var(--acc);color:var(--acc);
+     font-size:8px;padding:3px 10px;letter-spacing:.1em;border-radius:3px;white-space:nowrap}
+.mtg.o{display:block}
+/* region tag on map */
+.mrt{display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+     background:rgba(255,247,237,.9);border:.5px solid rgba(234,88,12,.35);color:rgba(234,88,12,.75);
+     font-size:7px;padding:2px 8px;letter-spacing:.12em;border-radius:3px;white-space:nowrap}
+.mrt.o{display:block}
+/* metrics bar */
+.mbar{display:none;flex-shrink:0;gap:0;margin-bottom:6px;border:.5px solid var(--b0);border-radius:var(--r);overflow:hidden}
+.mbar.o{display:flex}
+.mmet{flex:1;padding:6px 10px;border-right:.5px solid var(--b0);text-align:center}
+.mmet:last-child{border-right:none}
+.mmet-l{font-size:7px;letter-spacing:.18em;color:var(--t2);margin-bottom:2px}
+.mmet-v{font-size:14px;font-weight:500;color:var(--t0)}
+.mmet-sub{font-size:8px;color:var(--t2);margin-top:1px}
+
+/* ── RIGHT ── */
+.right{display:flex;flex-direction:column;padding:13px 15px 11px;overflow:hidden;min-height:0}
+.dtabs{display:flex;gap:4px;margin-bottom:10px;flex-shrink:0}
+.dtab{font-family:inherit;font-size:10px;letter-spacing:.1em;padding:4px 12px;
+      border-radius:4px;cursor:pointer;border:.5px solid var(--b1);
+      color:var(--t2);background:var(--bg1);transition:all .15s}
+.dtab.a{background:rgba(0,0,0,.03)}
+.dtab:hover:not(.a){border-color:var(--b2);color:var(--t1)}
+.emp{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.et{font-size:9px;letter-spacing:.2em;color:var(--t2)}
+.eh{font-size:9px;color:var(--t2);opacity:.45}
+.cv{display:none;flex-direction:column;flex:1;min-height:0}
+.cv.o{display:flex}
+.cr{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.cn{font-size:16px;font-weight:500;color:var(--t0);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rtabs{display:flex;gap:3px}
+.rtab{font-family:inherit;font-size:9px;letter-spacing:.06em;padding:3px 8px;
+      border-radius:3px;cursor:pointer;border:.5px solid var(--b0);
+      color:var(--t2);background:transparent;transition:all .13s}
+.rtab.a{background:var(--bg1);border-color:var(--b1);color:var(--t1)}
+.rtab:hover:not(.a){border-color:var(--b1);color:var(--t1)}
+.cbtn{font-family:inherit;font-size:9px;letter-spacing:.1em;padding:3px 9px;
+      border-radius:3px;cursor:pointer;border:.5px solid var(--b1);
+      color:var(--t2);background:var(--bg1);flex-shrink:0;display:flex;
+      align-items:center;gap:4px;transition:all .15s}
+.cbtn:hover{border-color:var(--acc);color:var(--acc)}
+.csub{font-size:8px;color:var(--t2);margin-bottom:5px}
+.leg{display:flex;gap:12px;font-size:9px;color:var(--t1);margin-bottom:5px;flex-wrap:wrap;flex-shrink:0}
+.li{display:flex;align-items:center;gap:5px}
+.lb{width:16px;height:2px;border-radius:1px;flex-shrink:0}
+.cb{flex:1;min-height:0;position:relative}
+.cl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:9px;letter-spacing:.2em;color:var(--t2);background:var(--bg0);z-index:4}
+.ce{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;
+    justify-content:center;gap:5px;text-align:center;padding:20px;
+    background:var(--bg0);z-index:4}
+.ce.o{display:flex}
+.cem{font-size:12px;color:var(--t1)}
+.cem2{font-size:9px;color:var(--t2)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="hdr">
+    <div class="hdot" id="hdot"></div>
+    <span class="ht" id="htitle">CHIKUNGUNYA · SÃO PAULO</span>
+    <span class="hb">INFODENGUE · SARIMA / HOLT-WINTERS · IC 90%</span>
+  </header>
+  <div class="body">
+    <!-- ── LEFT ── -->
+    <div class="left">
+      <div class="rgbar">
+        <span class="rglbl">REGIÃO INTERMEDIÁRIA</span>
+        <div class="rgcs">
+          <button class="rgc a" data-r="" data-rid="">TODAS</button>
+          <button class="rgc" data-r="São Paulo"            data-rid="3501">SÃO PAULO</button>
+          <button class="rgc" data-r="Campinas"             data-rid="3510">CAMPINAS</button>
+          <button class="rgc" data-r="Sorocaba"             data-rid="3502">SOROCABA</button>
+          <button class="rgc" data-r="São José dos Campos"  data-rid="3511">SJC</button>
+          <button class="rgc" data-r="Ribeirão Preto"       data-rid="3508">RIBEIRÃO P.</button>
+          <button class="rgc" data-r="Bauru"                data-rid="3503">BAURU</button>
+          <button class="rgc" data-r="Araraquara"           data-rid="3509">ARARAQUARA</button>
+          <button class="rgc" data-r="São José do Rio Preto" data-rid="3507">SJRP</button>
+          <button class="rgc" data-r="Araçatuba"            data-rid="3506">ARAÇATUBA</button>
+          <button class="rgc" data-r="Presidente Prudente"  data-rid="3505">PRES. PRUD.</button>
+          <button class="rgc" data-r="Marília"              data-rid="3504">MARÍLIA</button>
+        </div>
+      </div>
+      <div class="srch">
+        <label class="slbl" for="si">MUNICÍPIO</label>
+        <input id="si" type="text" placeholder="buscar cidade em SP…" autocomplete="off" spellcheck="false">
+        <div class="dd" id="dd"></div>
+      </div>
+      <div class="sc" id="sc">
+        <div class="sv"><div class="svl">TOTAL CASOS</div><div class="svv" id="s0">–</div></div>
+        <div class="sv"><div class="svl">PICO SEMANAL</div><div class="svv" id="s1">–</div></div>
+        <div class="sv"><div class="svl">PREV. 12 SEM.</div><div class="svv" id="s2">–</div></div>
+        <div class="sv"><div class="svl">PICO PREVISTO</div><div class="svv" id="s3">–</div></div>
+      </div>
+      <div class="mw" id="mw">
+        <div class="mpl" id="mpl">CARREGANDO…</div>
+        <svg id="msv"></svg>
+        <div class="mrt" id="mrt"></div>
+        <div class="mtg" id="mtg"></div>
+      </div>
+    </div>
+    <!-- ── RIGHT ── -->
+    <div class="right">
+
+      <div class="emp" id="emp">
+        <svg style="opacity:.14" width="52" height="26" viewBox="0 0 52 26" fill="none">
+          <polyline points="1,23 11,11 21,18 31,5 41,11 51,2"
+            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+        <span class="et">SELECIONE UM MUNICÍPIO</span>
+        <span class="eh" id="eh">buscando municípios…</span>
+      </div>
+      <div class="cv" id="cv">
+        <div class="cr">
+          <div class="cn" id="cn"></div>
+          <div class="rtabs" id="rtabs">
+            <button class="rtab"   data-w="52">1A</button>
+            <button class="rtab a" data-w="104">2A</button>
+            <button class="rtab"   data-w="260">5A</button>
+            <button class="rtab"   data-w="0">TUDO</button>
+          </div>
+          <button class="cbtn" id="dlbtn" title="Baixar CSV">↓ CSV</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:5px">
+          <div class="csub" id="csub"></div>
+          <div class="leg">
+            <div class="li"><div class="lb" id="lcol" style="background:#ea580c"></div><span>histórico</span></div>
+            <div class="li"><div style="width:16px;border-top:2px dashed #c2410c"></div><span>previsão</span></div>
+            <div class="li"><div class="lb" style="background:rgba(234,88,12,.2);height:8px;border-radius:2px"></div><span>IC 90%</span></div>
+          </div>
+        </div>
+        <div class="mbar" id="mbar">
+          <div class="mmet"><div class="mmet-l">R²</div><div class="mmet-v" id="m-r2">–</div><div class="mmet-sub">ajuste in-sample</div></div>
+          <div class="mmet"><div class="mmet-l">RMSE</div><div class="mmet-v" id="m-rmse">–</div><div class="mmet-sub">casos/semana</div></div>
+          <div class="mmet"><div class="mmet-l">MAE</div><div class="mmet-v" id="m-mae">–</div><div class="mmet-sub">casos/semana</div></div>
+          <div class="mmet"><div class="mmet-l">AIC</div><div class="mmet-v" id="m-aic">–</div><div class="mmet-sub">menor = melhor</div></div>
+        </div>
+        <div class="cb">
+          <div class="cl" id="cl">BUSCANDO DADOS…</div>
+          <div class="ce" id="ce"><span class="cem" id="em"></span><span class="cem2" id="em2"></span></div>
+          <div style="position:relative;width:100%;height:100%">
+            <canvas id="mc"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const dk=()=>false;
+const dcol=()=>'#ea580c';
+
+let munis=[],chartInst=null,proj=null,gpath=null;
+let curMuni=null,curDisease='chikungunya',curRegiao='',curRgid='';
+let _fullHl=[],_fullHd=[],_fullFl=[],_fullFd=[],_fullLo=[],_fullHi=[];
+let _winWeeks=104;
+const cache={};
+const isLocal=['localhost','127.0.0.1'].includes(location.hostname);
+
+/* ── Holt-Winters ETS (fallback browser) ── */
+function hwETS(y,H=12,m=52){
+  const n=y.length;
+  if(n<2*m){
+    const a=y.reduce((s,v)=>s+v,0)/n;
+    const s=Math.max(1,Math.round(a*.45));
+    const fc=Array(H).fill(Math.max(0,Math.round(a)));
+    return{fc,lo:fc.map(v=>Math.max(0,v-s)),hi:fc.map(v=>v+s)};
+  }
+  const al=.2,be=.01,ga=.3;
+  let L=y.slice(0,m).reduce((s,v)=>s+v,0)/m;
+  let B=0;for(let i=0;i<m;i++)B+=y[i+m]-y[i];B/=m*m;
+  let S=y.slice(0,m).map(v=>v-L);
+  const res=[];
+  for(let t=m;t<n;t++){
+    const s=t%m,Lp=L;
+    res.push(y[t]-(L+B+S[s]));
+    L=al*(y[t]-S[s])+(1-al)*(L+B);
+    B=be*(L-Lp)+(1-be)*B;
+    S[s]=ga*(y[t]-L)+(1-ga)*S[s];
+  }
+  const sig=Math.sqrt(res.reduce((a,e)=>a+e*e,0)/res.length);
+  const fc=[],lo=[],hi=[];
+  for(let h=1;h<=H;h++){
+    const v=Math.max(0,Math.round(L+h*B+S[(n+h-1)%m]));
+    const mg=Math.round(1.645*sig*Math.sqrt(h));
+    fc.push(v);lo.push(Math.max(0,v-mg));hi.push(v+mg);
+  }
+  return{fc,lo,hi};
+}
+
+/* ── SE helpers ── */
+function fmtSE(se){const s=String(se);return s.slice(2,4)+'/'+s.slice(4);}
+function nextSE(se){let y=Math.floor(se/100),w=se%100+1;if(w>52){w=1;y++;}return y*100+w;}
+function seToYear(lbl){return parseInt('20'+lbl.slice(0,2),10);}
+
+/* ── Stats ── */
+function setStats(cases,fc,col){
+  ['s0','s1'].forEach(id=>$(id).style.color=col);
+  ['s2','s3'].forEach(id=>$(id).style.color='#c2410c');
+  $('s0').textContent=cases.reduce((a,b)=>a+b,0).toLocaleString('pt-BR');
+  $('s1').textContent=Math.max(...cases).toLocaleString('pt-BR');
+  $('s2').textContent=fc.reduce((a,b)=>a+b,0).toLocaleString('pt-BR');
+  $('s3').textContent=Math.max(...fc).toLocaleString('pt-BR');
+}
+
+/* ── Metrics ── */
+function setMetrics(r2, rmse, mae, aic){
+  const bar = $('mbar');
+  bar.classList.add('o');
+  const r2El = $('m-r2');
+  if(r2 !== null && r2 !== undefined){
+    r2El.textContent = r2.toFixed(3);
+    r2El.style.color = r2 >= 0.7 ? '#16a34a' : r2 >= 0.4 ? '#d97706' : '#dc2626';
+  } else {
+    r2El.textContent = '–';
+    r2El.style.color = '';
+  }
+  const rmseEl = $('m-rmse');
+  rmseEl.textContent = rmse !== null && rmse !== undefined ? rmse.toFixed(1) : '–';
+  rmseEl.style.color = '#c2410c';
+  const maeEl = $('m-mae');
+  maeEl.textContent = mae !== null && mae !== undefined ? mae.toFixed(1) : '–';
+  maeEl.style.color = '#c2410c';
+  const aicEl = $('m-aic');
+  aicEl.textContent = aic !== null && aic !== undefined ? aic : '–';
+  aicEl.style.color = '';
+}
+
+/* ── Chart ── */
+const sepPlugin={
+  id:'sep',
+  afterDraw(chart){
+    const{ctx,chartArea,scales}=chart;
+    const ds=chart.data.datasets[0].data;
+    let si=-1;
+    for(let i=ds.length-1;i>=0;i--){if(!isNaN(ds[i])&&ds[i]!==null){si=i;break;}}
+    if(si<0)return;
+    const x=scales.x.getPixelForValue(si);
+    ctx.save();
+    ctx.setLineDash([3,4]);
+    ctx.strokeStyle='rgba(0,0,0,.12)';
+    ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,chartArea.top);ctx.lineTo(x,chartArea.bottom);ctx.stroke();
+    ctx.setLineDash([]);ctx.font="8px 'IBM Plex Mono',monospace";
+    ctx.fillStyle='rgba(0,0,0,.25)';ctx.textAlign='right';
+    ctx.fillText('HOJE',x-4,chartArea.top+10);
+    ctx.restore();
+  }
+};
+
+function drawChart(hl,hd,fl,fd,lo,hi){
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  const d=dk(),gc='rgba(0,0,0,.05)';
+  const tc='#9a8060';
+  const mf={family:"'IBM Plex Mono',monospace",size:9};
+  const col=dcol(),N=hl.length,H=fl.length;
+  const winStart=_winWeeks>0?Math.max(0,N-_winWeeks):0;
+  const hlW=hl.slice(winStart),hdW=hd.slice(winStart),NW=hlW.length;
+  const all=[...hlW,...fl];
+  const hF=[...hdW,...Array(H).fill(NaN)];
+  const fF=[...Array(NW).fill(NaN),...fd];
+  const uF=[...Array(NW).fill(NaN),...hi];
+  const lF=[...Array(NW).fill(NaN),...lo];
+  let lastYr=null;
+  const tickCb=(val,idx)=>{
+    const lbl=all[idx];if(!lbl)return'';
+    const wk=lbl.slice(3),yr=seToYear(lbl);
+    if(wk==='01'||(idx===0&&yr!==lastYr)){lastYr=yr;return String(yr);}
+    return'';
+  };
+  chartInst=new Chart($('mc'),{
+    type:'line',
+    data:{labels:all,datasets:[
+      {label:'Casos',data:hF,borderColor:col,borderWidth:1.5,pointRadius:0,tension:.2,
+       fill:{target:'origin',above:'rgba(234,88,12,.07)'},spanGaps:false,order:3},
+      {label:'IC sup',data:uF,borderColor:'rgba(234,88,12,.25)',borderWidth:.5,pointRadius:0,
+       fill:{target:'+1',above:'rgba(234,88,12,.12)'},backgroundColor:'rgba(234,88,12,.12)',
+       tension:.35,spanGaps:false,order:1},
+      {label:'IC inf',data:lF,borderColor:'rgba(234,88,12,.25)',borderWidth:.5,
+       pointRadius:0,fill:false,tension:.35,spanGaps:false,order:1},
+      {label:'Previsão',data:fF,borderColor:'#c2410c',borderWidth:2,borderDash:[6,3],
+       pointRadius:4,pointBackgroundColor:'#c2410c',
+       pointBorderColor:'#fff',pointBorderWidth:1.5,
+       tension:.35,fill:false,spanGaps:false,order:2}
+    ]},
+    plugins:[sepPlugin],
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:{duration:300},
+      layout:{padding:{right:12}},
+      plugins:{
+        legend:{display:false},
+        tooltip:{mode:'index',intersect:false,
+          filter:i=>!['IC sup','IC inf'].includes(i.dataset.label),
+          backgroundColor:'#fff',
+          borderColor:'rgba(0,0,0,.10)',borderWidth:.5,
+          titleColor:'#5a3c20',bodyColor:'#374151',
+          titleFont:mf,bodyFont:{family:mf.family,size:11},padding:10,cornerRadius:6,
+          callbacks:{
+            title:c=>{const l=c[0].label;return`Semana ${l.slice(3)}/${seToYear(l)}`;},
+            label:c=>{if(isNaN(c.raw)||c.raw===null)return null;
+              return c.dataset.label+': '+Math.round(c.raw).toLocaleString('pt-BR');}
+          }
+        }
+      },
+      scales:{
+        x:{ticks:{color:tc,font:mf,maxRotation:0,callback:tickCb,autoSkip:false,maxTicksLimit:20},grid:{color:gc}},
+        y:{beginAtZero:true,ticks:{color:tc,font:mf,callback:v=>v.toLocaleString('pt-BR')},grid:{color:gc}}
+      }
+    }
+  });
+}
+
+/* ── Range tabs ── */
+document.querySelectorAll('.rtab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('a'));
+    btn.classList.add('a');
+    _winWeeks=parseInt(btn.dataset.w)||0;
+    if(_fullHl.length)drawChart(_fullHl,_fullHd,_fullFl,_fullFd,_fullLo,_fullHi);
+  });
+});
+
+/* ── Map ── */
+const svg=d3.select('#msv');
+let mapLoaded=false, _mapInitialized=false;
+let _pendingRgid=null, _pendingRgName='', _pendingMuni=null;
+
+/* Converte TopoJSON → GeoJSON se necessário */
+function toGeo(data){
+  if(data && data.type==='Topology'){
+    const k=Object.keys(data.objects)[0];
+    return topojson.feature(data, data.objects[k]);
+  }
+  return data;
+}
+
+function initMap(w,h){
+  if(_mapInitialized) return;
+  _mapInitialized=true;
+  const url = isLocal
+    ? '/api/malha/estado/35'
+    : 'https://servicodados.ibge.gov.br/api/v3/malhas/estados/35?formato=application/json';
+  fetch(url)
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(raw=>{
+      const geo=toGeo(raw);
+      proj=d3.geoMercator().fitSize([w,h],geo);
+      gpath=d3.geoPath(proj);
+      svg.attr('viewBox',`0 0 ${w} ${h}`);
+      svg.append('path').datum(geo).attr('class','sp-base')
+        .attr('d',gpath).attr('fill','#e8d5be').attr('stroke','#c4a07a').attr('stroke-width',.8);
+      $('mpl').style.display='none';
+      mapLoaded=true;
+      if(_pendingRgid) hlRegiao(_pendingRgid, _pendingRgName);
+      if(_pendingMuni) hlMuni(_pendingMuni.id, _pendingMuni.name);
+    })
+    .catch(e=>{
+      console.error('map error:',e);
+      $('mpl').style.color='#4a90c0';
+      $('mpl').textContent='MAPA INDISPONÍVEL';
+    });
+}
+
+function loadMap(){
+  const el=$('mw');
+  const rect=el.getBoundingClientRect();
+  const w=Math.round(rect.width), h=Math.round(rect.height);
+  if(w>20&&h>20){ initMap(w,h); return; }
+  const ro=new ResizeObserver(entries=>{
+    for(const e of entries){
+      const{width,height}=e.contentRect;
+      if(width>20&&height>20){ ro.disconnect(); initMap(Math.round(width),Math.round(height)); }
+    }
+  });
+  ro.observe(el);
+}
+
+function hlRegiao(rid,name){
+  svg.selectAll('.rg-hl').remove();
+  const mrt=$('mrt');
+  if(!rid){_pendingRgid=null;_pendingRgName='';mrt.classList.remove('o');return;}
+  if(!mapLoaded){_pendingRgid=rid;_pendingRgName=name||'';return;}
+  _pendingRgid=null;_pendingRgName='';
+  const base = isLocal ? `/api/malha/regiao/${rid}` :
+    `https://servicodados.ibge.gov.br/api/v3/malhas/regioes-intermediarias/${rid}?formato=application/json`;
+  fetch(base)
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(raw=>{
+      const geo=toGeo(raw);
+      if(!proj)return;
+      svg.append('path').datum(geo).attr('class','rg-hl')
+        .attr('d',gpath)
+        .attr('fill','rgba(245,158,11,.18)')
+        .attr('stroke','#f59e0b').attr('stroke-width',1).attr('opacity',1);
+      if(name){
+        mrt.textContent=name.toUpperCase();
+        mrt.classList.add('o');
+      }
+    })
+    .catch(e=>console.warn('região highlight falhou:',e));
+}
+
+function hlMuni(id,name){
+  svg.selectAll('.mh').remove();
+  if(!id){_pendingMuni=null;return;}
+  if(!mapLoaded){_pendingMuni={id,name};return;}
+  _pendingMuni=null;
+  const base = isLocal ? `/api/malha/municipio/${id}` :
+    `https://servicodados.ibge.gov.br/api/v3/malhas/municipios/${id}?formato=application/json`;
+  fetch(base)
+    .then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(raw=>{
+      const geo=toGeo(raw);
+      if(!proj)return;
+      svg.append('path').datum(geo).attr('class','mh')
+        .attr('d',gpath).attr('fill','#f59e0b')
+        .attr('stroke','#fcd34d').attr('stroke-width',1.5).attr('opacity',.9);
+      const t=$('mtg');t.textContent=name.toUpperCase();t.classList.add('o');
+    })
+    .catch(e=>console.warn('município highlight falhou:',e));
+}
+
+/* ── Region filter ── */
+const REGIOES={
+  "São Paulo":["Arujá","Barueri","Biritiba-Mirim","Caieiras","Cajamar","Carapicuíba","Cotia","Diadema","Embu das Artes","Embu-Guaçu","Ferraz de Vasconcelos","Francisco Morato","Franco da Rocha","Guararema","Guarulhos","Itapecerica da Serra","Itapevi","Itaquaquecetuba","Jandira","Juquitiba","Mairiporã","Mauá","Mogi das Cruzes","Osasco","Pirapora do Bom Jesus","Poá","Ribeirão Pires","Rio Grande da Serra","Salesópolis","Santa Isabel","Santana de Parnaíba","Santo André","Suzano","São Bernardo do Campo","São Caetano do Sul","São Lourenço da Serra","São Paulo","Taboão da Serra","Vargem Grande Paulista","Bertioga","Cubatão","Guarujá","Itanhaém","Itariri","Mongaguá","Pedro de Toledo","Peruíbe","Praia Grande","Santos","São Vicente"],
+  "Campinas":["Americana","Artur Nogueira","Campinas","Cosmópolis","Elias Fausto","Holambra","Hortolândia","Indaiatuba","Jaguariúna","Monte Mor","Nova Odessa","Paulínia","Pedreira","Santa Bárbara d'Oeste","Santo Antônio de Posse","Sumaré","Valinhos","Vinhedo","Cabreúva","Campo Limpo Paulista","Itatiba","Itupeva","Jarinu","Jundiaí","Louveira","Morungaba","Várzea Paulista","Capivari","Charqueada","Laranjal Paulista","Mombuca","Piracicaba","Rafard","Rio das Pedras","Saltinho","Santa Maria da Serra","São Pedro","Águas de São Pedro","Atibaia","Bom Jesus dos Perdões","Bragança Paulista","Joanópolis","Nazaré Paulista","Pedra Bela","Pinhalzinho","Piracaia","Socorro","Tuiuti","Vargem","Cordeirópolis","Engenheiro Coelho","Iracemápolis","Limeira","Estiva Gerbi","Itapira","Mogi Guaçu","Mogi Mirim","Aguaí","Casa Branca","Espírito Santo do Pinhal","Santa Cruz das Palmeiras","Santo Antônio do Jardim","São João da Boa Vista","Tambaú","Vargem Grande do Sul","Águas da Prata","Araras","Conchal","Leme","Santa Cruz da Conceição","Analândia","Corumbataí","Ipeúna","Rio Claro","Santa Gertrudes","Caconde","Divinolândia","Itobi","Mococa","São José do Rio Pardo","São Sebastião da Grama","Tapiratiba","Amparo","Lindóia","Monte Alegre do Sul","Serra Negra","Águas de Lindóia"],
+  "Sorocaba":["Alumínio","Araçariguama","Araçoiaba da Serra","Boituva","Capela do Alto","Cerquilho","Ibiúna","Iperó","Itu","Jumirim","Mairinque","Piedade","Pilar do Sul","Porto Feliz","Salto","Salto de Pirapora","Sarapuí","Sorocaba","São Roque","Tapiraí","Tietê","Votorantim","Apiaí","Barra do Chapéu","Barão de Antonina","Bom Sucesso de Itararé","Buri","Capão Bonito","Guapiara","Itaberá","Itaóca","Itapeva","Itapirapuã Paulista","Itaporanga","Itararé","Nova Campina","Ribeira","Ribeirão Branco","Ribeirão Grande","Riversul","Taquarivaí","Barra do Turvo","Cajati","Cananéia","Eldorado","Iguape","Ilha Comprida","Iporanga","Jacupiranga","Juquiá","Miracatu","Pariquera-Açu","Registro","Sete Barras","Arandu","Avaré","Cerqueira César","Coronel Macedo","Iaras","Itaí","Manduri","Paranapanema","Taguaí","Taquarituba","Águas de Santa Bárbara","Óleo","Alambari","Angatuba","Campina do Monte Alegre","Guareí","Itapetininga","São Miguel Arcanjo","Cesário Lange","Pereiras","Porangaba","Quadra","Tatuí","Torre de Pedra"],
+  "São José dos Campos":["Caçapava","Igaratá","Jacareí","Jambeiro","Monteiro Lobato","Paraibuna","Santa Branca","São José dos Campos","Campos do Jordão","Lagoinha","Natividade da Serra","Pindamonhangaba","Redenção da Serra","Santo Antônio do Pinhal","São Bento do Sapucaí","São Luís do Paraitinga","Taubaté","Tremembé","Aparecida","Canas","Cunha","Guaratinguetá","Lorena","Piquete","Potim","Roseira","Caraguatatuba","Ilhabela","São Sebastião","Ubatuba","Arapeí","Areias","Bananal","Cachoeira Paulista","Cruzeiro","Lavrinhas","Queluz","Silveiras","São José do Barreiro"],
+  "Ribeirão Preto":["Altinópolis","Barrinha","Batatais","Brodowski","Cajuru","Cravinhos","Cássia dos Coqueiros","Dumont","Guariba","Guatapará","Jaboticabal","Jardinópolis","Luís Antônio","Monte Alto","Pitangueiras","Pontal","Pradópolis","Ribeirão Preto","Santa Cruz da Esperança","Santa Ernestina","Santa Rosa de Viterbo","Santo Antônio da Alegria","Serra Azul","Serrana","Sertãozinho","São Simão","Barretos","Bebedouro","Cajobi","Colina","Colômbia","Guaraci","Guaíra","Jaborandi","Monte Azul Paulista","Olímpia","Severínia","Taiaçu","Taiúva","Taquaral","Terra Roxa","Viradouro","Cristais Paulista","Franca","Itirapuã","Jeriquara","Patrocínio Paulista","Pedregulho","Restinga","Ribeirão Corrente","Rifaina","São José da Bela Vista","Ipuã","Morro Agudo","Nuporanga","Orlândia","Sales Oliveira","São Joaquim da Barra","Aramina","Buritizal","Guará","Igarapava","Ituverava","Miguelópolis"],
+  "Bauru":["Agudos","Arealva","Avaí","Balbinos","Bauru","Borebi","Cabrália Paulista","Duartina","Iacanga","Lençóis Paulista","Lucianópolis","Macatuba","Paulistânia","Pederneiras","Pirajuí","Piratininga","Presidente Alves","Reginópolis","Ubirajara","Bariri","Barra Bonita","Bocaina","Boracéia","Brotas","Dois Córregos","Igaraçu do Tietê","Itaju","Itapuí","Jaú","Mineiros do Tietê","Torrinha","Anhembi","Areiópolis","Bofete","Botucatu","Conchas","Itatinga","Pardinho","Pratânia","São Manuel","Cafelândia","Guaiçara","Guarantã","Lins","Pongaí","Promissão","Sabino","Uru"],
+  "Araraquara":["Américo Brasiliense","Araraquara","Boa Esperança do Sul","Borborema","Cândido Rodrigues","Dobrada","Gavião Peixoto","Ibitinga","Itápolis","Matão","Motuca","Nova Europa","Rincão","Santa Lúcia","Tabatinga","Taquaritinga","Trabiju","Descalvado","Dourado","Ibaté","Itirapina","Pirassununga","Porto Ferreira","Ribeirão Bonito","Santa Rita do Passa Quatro","São Carlos"],
+  "São José do Rio Preto":["Adolfo","Altair","Bady Bassitt","Bálsamo","Cedral","Guapiaçu","Ibirá","Icém","Ipiguá","Irapuã","Jaci","José Bonifácio","Macaubal","Mendonça","Mirassol","Mirassolândia","Monte Aprazível","Neves Paulista","Nipoã","Nova Aliança","Nova Granada","Novo Horizonte","Onda Verde","Orindiúva","Palestina","Paulo de Faria","Planalto","Poloni","Potirendaba","Sales","São José do Rio Preto","Tanabi","Ubarana","Uchoa","União Paulista","Urupês","Ariranha","Catanduva","Catiguá","Elisiário","Embaúba","Fernando Prestes","Itajobi","Marapoama","Novais","Palmares Paulista","Paraíso","Pindorama","Pirangi","Santa Adélia","Tabapuã","Vista Alegre do Alto","Aparecida d'Oeste","Aspásia","Dirce Reis","Dolcinópolis","Jales","Marinópolis","Mesópolis","Palmeira d'Oeste","Paranapuã","Pontalinda","Populina","Santa Albertina","Santa Salete","Suzanápolis","São Francisco","Turmalina","Urânia","Vitória Brasil","Américo de Campos","Cardoso","Cosmorama","Floreal","Nhandeara","Parisi","Pontes Gestal","Riolândia","Sebastianópolis do Sul","Valentim Gentil","Votuporanga","Álvares Florence","Estrela d'Oeste","Fernandópolis","Guarani d'Oeste","Indiaporã","Macedônia","Meridiano","Mira Estrela","Ouroeste","Pedranópolis","São João das Duas Pontes","São João de Iracema","Nova Canaã Paulista","Rubinéia","Santa Clara d'Oeste","Santa Fé do Sul","Santa Rita d'Oeste","Santana da Ponte Pensa","Três Fronteiras"],
+  "Araçatuba":["Araçatuba","Auriflama","Bento de Abreu","Gastão Vidigal","General Salgado","Guararapes","Guzolândia","Magda","Monções","Nova Castilho","Nova Luzitânia","Rubiácea","Santo Antônio do Aracanguá","Valparaíso","Alto Alegre","Avanhandava","Barbosa","Bilac","Birigui","Braúna","Brejo Alegre","Buritama","Clementina","Coroados","Gabriel Monteiro","Glicério","Lourdes","Luiziânia","Penápolis","Piacatu","Santópolis do Aguapeí","Turiúba","Zacarias","Andradina","Castilho","Guaraçaí","Ilha Solteira","Itapura","Lavínia","Mirandópolis","Murutinga do Sul","Nova Independência","Pereira Barreto","Sud Mennucci"],
+  "Presidente Prudente":["Alfredo Marcondes","Anhumas","Caiabu","Emilianópolis","Estrela do Norte","Euclides da Cunha Paulista","Iepê","Indiana","João Ramalho","Martinópolis","Mirante do Paranapanema","Nantes","Narandiba","Pirapozinho","Presidente Bernardes","Presidente Prudente","Quatá","Rancharia","Regente Feijó","Ribeirão dos Índios","Rosana","Sandovalina","Santo Anastácio","Santo Expedito","Taciba","Tarabai","Teodoro Sampaio","Álvares Machado","Dracena","Flora Rica","Irapuru","Junqueirópolis","Monte Castelo","Nova Guataporanga","Ouro Verde","Panorama","Paulicéia","Santa Mercedes","São João do Pau d'Alho","Tupi Paulista","Adamantina","Flórida Paulista","Inúbia Paulista","Lucélia","Mariápolis","Osvaldo Cruz","Pacaembu","Pracinha","Sagres","Salmourão","Caiuá","Marabá Paulista","Piquerobi","Presidente Epitácio","Presidente Venceslau"],
+  "Marília":["Alvinlândia","Campos Novos Paulista","Echaporã","Fernão","Garça","Getulina","Guaimbê","Gália","Júlio Mesquita","Lupércio","Marília","Ocauçu","Oriente","Oscar Bressane","Pompéia","Quintana","Vera Cruz","Álvaro de Carvalho","Assis","Borá","Cruzália","Cândido Mota","Florínia","Lutécia","Maracaí","Palmital","Paraguaçu Paulista","Pedrinhas Paulista","Platina","Tarumã","Bernardino de Campos","Canitar","Chavantes","Espírito Santo do Turvo","Ibirarema","Ipaussu","Ourinhos","Ribeirão do Sul","Salto Grande","Santa Cruz do Rio Pardo","São Pedro do Turvo","Arco-Íris","Bastos","Herculândia","Iacri","Parapuã","Queiroz","Rinópolis","Tupã","Fartura","Piraju","Sarutaiá","Tejupá","Timburi"]
+};
+
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const CIDADE_REG={};
+for(const[r,cs]of Object.entries(REGIOES))for(const c of cs)CIDADE_REG[norm(c)]=r;
+
+// Mapeia nome de região → rid (lê dos botões do DOM)
+const REG_RID={};
+document.querySelectorAll('.rgc[data-r]').forEach(b=>{if(b.dataset.r)REG_RID[b.dataset.r]=b.dataset.rid;});
+
+function filterMunis(q){
+  let pool=munis;
+  if(curRegiao)pool=munis.filter(m=>CIDADE_REG[norm(m.nome)]===curRegiao);
+  if(q.length<2)return pool.slice(0,14);
+  return pool.filter(m=>norm(m.nome).includes(norm(q))).slice(0,12);
+}
+
+/* ── Region chips ── */
+document.querySelectorAll('.rgc').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.rgc').forEach(b=>b.classList.remove('a'));
+    btn.classList.add('a');
+    curRegiao=btn.dataset.r;
+    curRgid=btn.dataset.rid;
+    svg.selectAll('.mh').remove();
+    $('mtg').classList.remove('o');
+    hlRegiao(curRgid,curRegiao);
+    const res=filterMunis($('si').value.trim());
+    if(res.length>0){
+      $('dd').innerHTML=res.map(m=>`<div class="ddi" data-id="${m.id}" data-n="${m.nome.replace(/"/g,"'")}"><span>${m.nome}</span></div>`).join('');
+      $('dd').classList.add('o');
+    }
+    $('si').focus();
+  });
+});
+
+/* ── Search ── */
+$('si').addEventListener('input',e=>{
+  const q=e.target.value.trim();
+  if(q.length<2&&!curRegiao){$('dd').classList.remove('o');return;}
+  const res=filterMunis(q);
+  $('dd').innerHTML=res.length
+    ?res.map(m=>{
+        const rg=CIDADE_REG[norm(m.nome)]||'';
+        const badge=rg&&!curRegiao?`<span class="ddi-rg">${rg.split(' ')[0].toUpperCase()}</span>`:'';
+        return`<div class="ddi" data-id="${m.id}" data-n="${m.nome.replace(/"/g,"'")}"><span>${m.nome}</span>${badge}</div>`;
+      }).join('')
+    :'<div class="ddi" style="opacity:.4;cursor:default">nenhum resultado</div>';
+  $('dd').classList.add('o');
+});
+$('si').addEventListener('blur',()=>setTimeout(()=>$('dd').classList.remove('o'),200));
+$('dd').addEventListener('mousedown',e=>{
+  const d=e.target.closest('.ddi[data-id]');if(!d)return;
+  e.preventDefault();select({id:d.dataset.id,nome:d.dataset.n});
+});
+
+/* ── Doença fixa: chikungunya ── */
+$('hdot').style.background='#ea580c';
+
+/* ── CORS proxy for InfoDengue ── */
+const PROXIES=[
+  u=>`https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+];
+async function fetchInfoDengue(geocode,disease){
+  const qs=`?geocode=${geocode}&disease=${disease}&format=json&ew_start=1&ew_end=52&ey_start=2017&ey_end=2026`;
+  if(isLocal){
+    const r=await fetch(`/api/infodengue${qs}`);
+    if(!r.ok)throw new Error(`Proxy HTTP ${r.status}`);
+    return r.json();
+  }
+  const direct=`https://info.dengue.mat.br/api/alertcity${qs}`;
+  try{const r=await fetch(direct);if(r.ok)return r.json();}catch(_){}
+  for(const mk of PROXIES){try{const r=await fetch(mk(direct));if(r.ok)return r.json();}catch(_){}}
+  throw new Error('CORS bloqueado — rode servidor.py e acesse http://localhost:8080');
+}
+
+/* ── Load data ── */
+async function loadData(){
+  if(!curMuni)return;
+  const col=dcol();
+  $('cl').style.display='flex';
+  $('cl').textContent=isLocal?'AJUSTANDO SARIMA…':'BUSCANDO DADOS…';
+  $('ce').classList.remove('o');
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  $('lcol').style.background=col;
+  try{
+    if(isLocal){
+      const cityReg=CIDADE_REG[norm(curMuni.nome)]||'';
+      $('cl').textContent=`SARIMA REGIONAL${cityReg?' — '+cityReg.toUpperCase():''}…`;
+      const r=await fetch(`/api/forecast?geocode=${curMuni.id}&disease=${curDisease}&H=12&region=${encodeURIComponent(cityReg)}`);
+      const d=await r.json();
+      if(!r.ok||d.erro)throw new Error(d.erro||(d.fix?d.fix:`HTTP ${r.status}`));
+      const{historical,fc,lo,hi,fses,model,aic}=d;
+      const hl=historical.map(x=>fmtSE(x.SE));
+      const cases=historical.map(x=>x.casos);
+      const fl=fses.map(se=>fmtSE(se));
+      const regionLabel = d.region ? ` · Região: ${d.region}` : '';
+      $('csub').textContent=`${model} · AIC ${aic}${regionLabel} · 2017–2026 + PREVISÃO 12 SEM. (IC 90%)`;
+      $('cl').style.display='none';
+      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;
+      drawChart(hl,cases,fl,fc,lo,hi);
+      setStats(cases,fc,col);
+      setMetrics(d.r2, d.rmse, d.mae, d.aic);
+      $('sc').classList.add('o');
+      $('dlbtn')._d={sorted:historical.map(x=>({SE:x.SE,casos_est:x.casos})),fc,fl,lo,hi};
+    }else{
+      $('csub').textContent=`${curDisease.toUpperCase()} · HOLT-WINTERS ETS · 2017–2026 + PREVISÃO 12 SEM. (IC 90%)`;
+      const key=`${curMuni.id}_${curDisease}`;
+      let data=cache[key];
+      if(!data){
+        data=await fetchInfoDengue(curMuni.id,curDisease);
+        if(!Array.isArray(data)||!data.length)throw new Error('sem dados para este município');
+        cache[key]=data;
+      }
+      const sorted=data.sort((a,b)=>a.SE-b.SE);
+      const hl=sorted.map(d=>fmtSE(d.SE));
+      const cases=sorted.map(d=>Math.max(0,Math.round(+(d.casos_est||d.casos||0))));
+      const{fc,lo,hi}=hwETS(cases);
+      let lastSE=sorted[sorted.length-1].SE;
+      const fl=fc.map(()=>{lastSE=nextSE(lastSE);return fmtSE(lastSE);});
+      $('cl').style.display='none';
+      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;
+      drawChart(hl,cases,fl,fc,lo,hi);
+      setStats(cases,fc,col);
+      (()=>{
+        const n=cases.length, m=52;
+        if(n < 2*m){ setMetrics(null,null,null,null); return; }
+        const al=.2,be=.01,ga=.3;
+        let L=cases.slice(0,m).reduce((s,v)=>s+v,0)/m;
+        let B=0; for(let i=0;i<m;i++)B+=(cases[i+m]-cases[i]);B/=m*m;
+        let S=cases.slice(0,m).map(v=>v-L);
+        const fitted=[];
+        for(let t=m;t<n;t++){
+          const s=t%m,Lp=L;
+          fitted.push(Math.max(0,L+B+S[s]));
+          L=al*(cases[t]-S[s])+(1-al)*(L+B);
+          B=be*(L-Lp)+(1-be)*B;
+          S[s]=ga*(cases[t]-L)+(1-ga)*S[s];
+        }
+        const act=cases.slice(m);
+        const res=act.map((v,i)=>v-fitted[i]);
+        const rmse=Math.sqrt(res.reduce((a,e)=>a+e*e,0)/res.length);
+        const mae=res.reduce((a,e)=>a+Math.abs(e),0)/res.length;
+        const mean=act.reduce((a,v)=>a+v,0)/act.length;
+        const ssTot=act.reduce((a,v)=>a+(v-mean)**2,0);
+        const ssRes=res.reduce((a,e)=>a+e*e,0);
+        const r2=ssTot>0?1-ssRes/ssTot:null;
+        setMetrics(r2?parseFloat(r2.toFixed(4)):null,parseFloat(rmse.toFixed(4)),parseFloat(mae.toFixed(4)),null);
+      })();
+      $('sc').classList.add('o');
+      $('dlbtn')._d={sorted,fc,fl,lo,hi};
+    }
+  }catch(e){
+    $('cl').style.display='none';
+    console.error('[forecast]',e);
+    $('em').textContent='Não foi possível carregar os dados.';
+    $('em2').textContent=e.message||'Verifique a conexão.';
+    $('ce').classList.add('o');
+  }
+}
+
+/* ── Select municipality ── */
+function select(m){
+  curMuni=m;$('dd').classList.remove('o');$('si').value=m.nome;
+  $('emp').style.display='none';$('cv').classList.add('o');$('cn').textContent=m.nome;
+  // Destaca município no mapa
+  hlMuni(m.id,m.nome);
+  // Destaca automaticamente a região correspondente no mapa
+  const cityReg=CIDADE_REG[norm(m.nome)]||'';
+  if(cityReg){
+    const rid=REG_RID[cityReg]||'';
+    if(rid) hlRegiao(rid,cityReg);
+  }
+  loadData();
+}
+
+/* ── CSV ── */
+$('dlbtn').addEventListener('click',()=>{
+  const d=$('dlbtn')._d;if(!d||!curMuni)return;
+  const rows=[['SE','semana','municipio','geocode','doenca','tipo','casos','ic_lower','ic_upper']];
+  d.sorted.forEach(r=>rows.push([r.SE,fmtSE(r.SE),curMuni.nome,curMuni.id,curDisease,'historico',
+    Math.max(0,Math.round(+(r.casos_est||r.casos||0))),'','']));
+  let se=d.sorted[d.sorted.length-1].SE;
+  d.fc.forEach((v,i)=>{se=nextSE(se);rows.push([se,d.fl[i],curMuni.nome,curMuni.id,curDisease,'previsao',v,d.lo[i],d.hi[i]]);});
+  Object.assign(document.createElement('a'),{
+    href:'data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n')),
+    download:`${curMuni.nome.replace(/\s/g,'_')}_${curDisease}.csv`
+  }).click();
+});
+
+/* ── Init ── */
+async function init(){
+  window.addEventListener('load', loadMap, {once:true});
+  setTimeout(loadMap, 400);
+  try{
+    const r=await fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados/35/municipios');
+    const data=await r.json();
+    munis=data.map(m=>({id:String(m.id),nome:m.nome})).sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+    $('eh').textContent=`${munis.length} municípios — selecione uma região ou busque`;
+  }catch(e){$('eh').textContent='erro ao buscar municípios';}
+}
+init();
+</script>
+</body>
+</html>
