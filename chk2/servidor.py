@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
 servidor.py — Dashboard Dengue/Chikungunya/Zika SP
-Modelo por REGIÃO: um único SARIMA sobre a série agregada regional,
-previsão escalada proporcionalmente ao município.
+Modelo por REGIÃO: um único SARIMAX sobre a série agregada regional,
+usando temperatura e umidade médias (InfoDengue) como variáveis exógenas,
+previsão escalada proporcionalmente ao município. Como o clima futuro não é
+conhecido, as semanas do horizonte de previsão usam a normal climatológica
+(média histórica da mesma semana epidemiológica).
 
 Instalação: pip install statsmodels numpy
 Uso: python servidor.py
 """
 import http.server, urllib.request, urllib.error, urllib.parse
 import ssl, json, os, sys, threading, webbrowser, time, traceback
-import unicodedata, concurrent.futures
+import unicodedata, concurrent.futures, datetime
 
 try:
     import numpy as np
@@ -24,6 +27,12 @@ try:
     HAS_SM = True
 except ImportError:
     HAS_SM = False
+
+try:
+    from xgboost import XGBRegressor
+    HAS_XGB = True
+except ImportError:
+    HAS_XGB = False
 
 HAS_SARIMA = HAS_NUMPY and HAS_SM
 
@@ -121,6 +130,51 @@ def next_se(se):
     if w > 52: w, y = 1, y + 1
     return y * 100 + w
 
+def _to_float(v):
+    try:
+        if v is None or v == "":
+            return None
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+def _fill_nan(vals):
+    """Interpola linearmente valores ausentes (NaN) de uma série de clima."""
+    arr = np.array(vals, dtype=float)
+    ok  = ~np.isnan(arr)
+    if not ok.any():
+        return None
+    idx = np.arange(len(arr))
+    if not ok.all():
+        arr[~ok] = np.interp(idx[~ok], idx[ok], arr[ok])
+    return arr
+
+def _climatology_forecast(ses, values, future_ses):
+    """Projeta clima futuro pela média histórica da mesma semana epidemiológica (normal climatológica)."""
+    by_week = {}
+    for se, v in zip(ses, values):
+        by_week.setdefault(int(se) % 100, []).append(v)
+    overall = float(np.nanmean(values))
+    out = []
+    for fse in future_ses:
+        vs = by_week.get(int(fse) % 100)
+        out.append(float(np.mean(vs)) if vs else overall)
+    return out
+
+def _build_exog(agg, fses):
+    """Monta matrizes de variáveis exógenas (clima) histórica e futura para o SARIMAX."""
+    ses  = agg["ses"]
+    cols_hist, cols_fut, nomes = [], [], []
+    for campo, serie in (("tempmed", agg.get("temp")), ("umidmed", agg.get("umid"))):
+        if serie is None:
+            continue
+        cols_hist.append(serie)
+        cols_fut.append(_climatology_forecast(ses, serie, fses))
+        nomes.append(campo)
+    if not cols_hist:
+        return None, None, []
+    return np.column_stack(cols_hist), np.column_stack(cols_fut), nomes
+
 # ── InfoDengue ────────────────────────────────────────────────────────────────
 def fetch_infodengue(geocode, disease):
     qs  = (f"?geocode={geocode}&disease={disease}&format=json"
@@ -140,43 +194,52 @@ def _fetch_one(args):
         return gc, None
 
 # ── SARIMA cascata ────────────────────────────────────────────────────────────
-def sarima_forecast(cases, H=12):
+def sarima_forecast(cases, H=3, exog=None, exog_future=None):
     import warnings
-    y    = np.array(cases, dtype=float)
-    y_sm = np.where(y == 0, 0.1, y)
-    n    = len(y)
+    y     = np.array(cases, dtype=float)
+    y_log = np.log1p(y)   # estabiliza variância e impede previsão < 0 (sem floor artificial em 0)
+    n     = len(y)
 
-    def _ic(res, fc):
+    X  = np.asarray(exog, dtype=float) if exog is not None else None
+    Xf = np.asarray(exog_future, dtype=float) if exog_future is not None else None
+    has_exog = X is not None and Xf is not None
+
+    def _fc_kwargs():
+        return {"steps": H, "exog": Xf} if has_exog else {"steps": H}
+
+    def _ic(res, fc_log):
         try:
-            ci = res.get_forecast(steps=H).conf_int(alpha=0.10)
-            lo = [max(0,int(round(float(v)))) for v in ci.iloc[:,0]]
-            hi = [int(round(float(v))) for v in ci.iloc[:,1]]
+            ci = res.get_forecast(**_fc_kwargs()).conf_int(alpha=0.10)
+            lo = [max(0.0, float(np.expm1(v))) for v in ci.iloc[:,0]]
+            hi = [max(0.0, float(np.expm1(v))) for v in ci.iloc[:,1]]
             return lo, hi
         except Exception:
             sig = float(np.sqrt(np.nanmean(np.array(res.resid)**2)))
-            lo = [max(0, fc[i]-int(round(1.645*sig*(i+1)**.5))) for i in range(H)]
-            hi = [fc[i]+int(round(1.645*sig*(i+1)**.5)) for i in range(H)]
+            lo = [max(0.0, float(np.expm1(fc_log[i]-1.645*sig*(i+1)**.5))) for i in range(H)]
+            hi = [max(0.0, float(np.expm1(fc_log[i]+1.645*sig*(i+1)**.5))) for i in range(H)]
             return lo, hi
 
     def _metrics(res):
         try:
             resid = np.array(res.resid, dtype=float)
             fv    = np.array(res.fittedvalues, dtype=float)
-            ml    = min(len(y_sm), len(fv))
-            ya, yf = y_sm[-ml:], fv[-ml:]
+            ml    = min(len(y_log), len(fv))
+            ya, yf = y_log[-ml:], fv[-ml:]
             ss_r = float(np.nansum((ya-yf)**2))
             ss_t = float(np.nansum((ya-np.nanmean(ya))**2))
+            y_orig, yf_orig = np.expm1(ya), np.expm1(yf)   # RMSE/MAE reportados na escala original (casos)
             return (round(1-ss_r/ss_t,4) if ss_t>0 else None,
-                    round(float(np.sqrt(np.nanmean(resid**2))),4),
-                    round(float(np.nanmean(np.abs(resid))),4))
+                    round(float(np.sqrt(np.nanmean((y_orig-yf_orig)**2))),4),
+                    round(float(np.nanmean(np.abs(y_orig-yf_orig))),4))
         except Exception:
             return None, None, None
 
     def _result(res, label):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            fc = [max(0,int(round(float(v)))) for v in res.get_forecast(steps=H).predicted_mean]
-        lo, hi = _ic(res, fc)
+            fc_log = np.asarray(res.get_forecast(**_fc_kwargs()).predicted_mean, dtype=float)
+        fc = [max(0.0, float(np.expm1(v))) for v in fc_log]
+        lo, hi = _ic(res, fc_log)
         r2, rmse, mae = _metrics(res)
         return dict(fc=fc, lo=lo, hi=hi, model=label,
                     aic=round(float(res.aic),1), bic=round(float(res.bic),1),
@@ -185,8 +248,11 @@ def sarima_forecast(cases, H=12):
     def _fit(order, seas, method="lbfgs"):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            m = SARIMAX(y_sm, order=order, seasonal_order=seas,
-                        enforce_stationarity=False, enforce_invertibility=False, trend="n")
+            kwargs = dict(order=order, seasonal_order=seas, enforce_stationarity=False,
+                          enforce_invertibility=False, trend="c")
+            if has_exog:
+                kwargs["exog"] = X
+            m = SARIMAX(y_log, **kwargs)
             return m.fit(disp=False, maxiter=300, method=method)
 
     if n >= 104:
@@ -206,7 +272,10 @@ def sarima_forecast(cases, H=12):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                res = ARIMA(y_sm, order=order).fit()
+                kwargs = dict(order=order, trend="c")
+                if has_exog:
+                    kwargs["exog"] = X
+                res = ARIMA(y_log, **kwargs).fit()
             print(f"  \033[33m[modelo]\033[0m {lbl} · AIC {round(float(res.aic),1)}")
             return _result(res, lbl)
         except Exception:
@@ -216,24 +285,100 @@ def sarima_forecast(cases, H=12):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         use_s = n >= 2*52
-        hw = ExponentialSmoothing(y_sm, trend="add",
+        hw = ExponentialSmoothing(y_log, trend="add",
                                   seasonal="add" if use_s else None,
                                   seasonal_periods=52 if use_s else None,
                                   initialization_method="estimated").fit(optimized=True)
-    fc  = [max(0,int(round(float(v)))) for v in hw.forecast(H)]
+    fc_log = np.asarray(hw.forecast(H), dtype=float)
+    fc  = [max(0.0, float(np.expm1(v))) for v in fc_log]
     res = np.array(hw.resid, dtype=float)
     sig = float(np.sqrt(np.nanmean(res**2)))
-    lo  = [max(0, fc[i]-int(round(1.645*sig*(i+1)**.5))) for i in range(H)]
-    hi  = [fc[i]+int(round(1.645*sig*(i+1)**.5)) for i in range(H)]
-    fv  = np.array(hw.fittedvalues); ml = min(len(y_sm),len(fv))
-    ya2, yf2 = y_sm[-ml:], fv[-ml:]
+    lo  = [max(0.0, float(np.expm1(fc_log[i]-1.645*sig*(i+1)**.5))) for i in range(H)]
+    hi  = [max(0.0, float(np.expm1(fc_log[i]+1.645*sig*(i+1)**.5))) for i in range(H)]
+    fv  = np.array(hw.fittedvalues); ml = min(len(y_log),len(fv))
+    ya2, yf2 = y_log[-ml:], fv[-ml:]
     ss_r = float(np.nansum((ya2-yf2)**2)); ss_t = float(np.nansum((ya2-np.nanmean(ya2))**2))
+    y_orig2, yf_orig2 = np.expm1(ya2), np.expm1(yf2)
     aic = round(float(hw.aic),1) if hasattr(hw,"aic") else None
     print(f"  \033[33m[modelo]\033[0m Holt-Winters ETS · AIC {aic}")
     return dict(fc=fc, lo=lo, hi=hi, model="Holt-Winters ETS", aic=aic, bic=None,
                 r2=round(1-ss_r/ss_t,4) if ss_t>0 else None,
-                rmse=round(float(np.sqrt(np.nanmean(res**2))),4),
-                mae=round(float(np.nanmean(np.abs(res))),4))
+                rmse=round(float(np.sqrt(np.nanmean((y_orig2-yf_orig2)**2))),4),
+                mae=round(float(np.nanmean(np.abs(y_orig2-yf_orig2))),4))
+
+# ── XGBoost (gradient boosting) ────────────────────────────────────────────────
+def _xgb_row(cases, temp, umid, ses, idx, t_temp, t_umid):
+    """Features observáveis na semana idx para prever uma semana-alvo futura."""
+    def lag(k):
+        j = idx - k
+        return float(cases[j]) if j >= 0 else np.nan
+    row = [
+        lag(0), lag(1), lag(2), lag(3), lag(51),
+        float(np.mean(cases[max(0, idx-3):idx+1])),
+        float(np.mean(cases[max(0, idx-7):idx+1])),
+    ]
+    se_week = int(ses[idx]) % 100
+    row += [np.sin(2*np.pi*se_week/52), np.cos(2*np.pi*se_week/52)]
+    row += [temp[idx] if temp is not None else np.nan,
+            umid[idx] if umid is not None else np.nan]
+    row += [t_temp if t_temp is not None else np.nan,
+            t_umid if t_umid is not None else np.nan]
+    return row
+
+def _xgb_dataset(cases, temp, umid, ses, h):
+    """Monta pares (features em t, alvo em t+h) para previsão direta multi-horizonte."""
+    n = len(cases)
+    X, y = [], []
+    for idx in range(51, n - h):
+        tgt = idx + h
+        t_temp = temp[tgt] if temp is not None else None
+        t_umid = umid[tgt] if umid is not None else None
+        X.append(_xgb_row(cases, temp, umid, ses, idx, t_temp, t_umid))
+        y.append(np.log1p(cases[tgt]))
+    return np.array(X, dtype=float), np.array(y, dtype=float)
+
+def xgboost_forecast(agg, fses, H=3):
+    """Gradient boosting (XGBoost) com previsão direta por horizonte (1 modelo por
+    semana futura) e regressão quantílica (5/50/95%) para o IC 90%. Features:
+    defasagens de casos, médias móveis, sazonalidade (semana do ano) e clima
+    (tempmed/umidmed atuais + climatologia projetada para a semana-alvo)."""
+    cases = np.array(agg["cases"], dtype=float)
+    temp, umid, ses = agg.get("temp"), agg.get("umid"), agg["ses"]
+    n = len(cases)
+    if n < 51 + H + 20:   # exige margem mínima de amostras de treino
+        return None
+
+    temp_fut = _climatology_forecast(ses, temp, fses) if temp is not None else [None]*H
+    umid_fut = _climatology_forecast(ses, umid, fses) if umid is not None else [None]*H
+
+    fc, lo, hi = [], [], []
+    fitted_all, actual_all = [], []
+    for h in range(1, H+1):
+        X, y = _xgb_dataset(cases, temp, umid, ses, h)
+        model = XGBRegressor(
+            n_estimators=200, max_depth=3, learning_rate=0.08,
+            subsample=0.9, colsample_bytree=0.9,
+            objective="reg:quantileerror", quantile_alpha=np.array([0.05, 0.5, 0.95]),
+            multi_strategy="one_output_per_tree", tree_method="hist", n_jobs=1,
+        )
+        model.fit(X, y)
+
+        fitted = model.predict(X)               # (n_train, 3) → [q05,q50,q95]
+        fitted_all.append(np.expm1(fitted[:, 1]))
+        actual_all.append(np.expm1(y))
+
+        x_inf = np.array([_xgb_row(cases, temp, umid, ses, n-1, temp_fut[h-1], umid_fut[h-1])])
+        q = np.sort(model.predict(x_inf)[0])    # evita cruzamento de quantis
+        lo.append(max(0.0, float(np.expm1(q[0]))))
+        fc.append(max(0.0, float(np.expm1(q[1]))))
+        hi.append(max(0.0, float(np.expm1(q[2]))))
+
+    y_all, yf_all = np.concatenate(actual_all), np.concatenate(fitted_all)
+    ss_r = float(np.sum((y_all-yf_all)**2)); ss_t = float(np.sum((y_all-np.mean(y_all))**2))
+    return dict(fc=fc, lo=lo, hi=hi, model="XGBoost (gradient boosting)", aic=None, bic=None,
+                r2=round(1-ss_r/ss_t, 4) if ss_t > 0 else None,
+                rmse=round(float(np.sqrt(np.mean((y_all-yf_all)**2))), 4),
+                mae=round(float(np.mean(np.abs(y_all-yf_all))), 4))
 
 # ── Agregação e modelo regional ───────────────────────────────────────────────
 def get_regional_aggregate(region, disease):
@@ -260,37 +405,72 @@ def get_regional_aggregate(region, disease):
         results = list(ex.map(_fetch_one, [(g, disease) for g in geocodes]))
     print(f"  \033[36m[região]\033[0m fetch concluído em {round(time.time()-t0,1)}s")
 
-    se_total = {}
-    city_se  = {}   # geocode → {SE: casos}
+    se_total    = {}
+    se_temp     = {}   # SE → [tempmed,...] amostras das cidades da região
+    se_umid     = {}   # SE → [umidmed,...]
+    se_date     = {}   # SE → data_iniSE (ms epoch) — data real de início da semana
+    city_se     = {}   # geocode → {SE: casos}
+    city_latest = {}   # geocode → última linha (SE mais recente) com clima/população/Rt/etc.
     for gc, data in results:
         if not data or not isinstance(data, list):
             continue
         city_se[gc] = {}
+        latest_se, latest_row = -1, None
         for row in data:
             se  = int(row["SE"])
             cas = max(0, round(float(row.get("casos_est") or row.get("casos") or 0)))
             city_se[gc][se] = cas
             se_total[se]    = se_total.get(se, 0) + cas
+            t = _to_float(row.get("tempmed"))
+            if t is not None:
+                se_temp.setdefault(se, []).append(t)
+            u = _to_float(row.get("umidmed"))
+            if u is not None:
+                se_umid.setdefault(se, []).append(u)
+            if se not in se_date and row.get("data_iniSE") is not None:
+                se_date[se] = row["data_iniSE"]
+            if se > latest_se:
+                latest_se, latest_row = se, row
+        if latest_row is not None:
+            city_latest[gc] = latest_row
 
     ses   = sorted(se_total.keys())
     cases = [se_total[se] for se in ses]
-    agg   = {"ses": ses, "cases": cases, "city_se": city_se}
+    temp  = _fill_nan([np.mean(se_temp[se]) if se in se_temp else float("nan") for se in ses])
+    umid  = _fill_nan([np.mean(se_umid[se]) if se in se_umid else float("nan") for se in ses])
+    agg   = {"ses": ses, "cases": cases, "city_se": city_se, "temp": temp, "umid": umid,
+              "city_latest": city_latest, "se_date": se_date}
     with _lock:
         _regional_data[key] = agg
     return agg
 
-def get_regional_model(region, disease, H=12):
-    key = (region, disease, H)
+def _clima_info(row):
+    """Extrai população, clima e indicadores epidemiológicos da última linha InfoDengue da cidade."""
+    if not row:
+        return None
+    def f(k, nd=1):
+        v = _to_float(row.get(k))
+        return round(v, nd) if v is not None else None
+    pop = _to_float(row.get("pop"))
+    nivel = row.get("nivel")
+    return {
+        "SE": int(row["SE"]) if row.get("SE") is not None else None,
+        "pop": int(pop) if pop is not None else None,
+        "tempmed": f("tempmed"), "tempmin": f("tempmin"), "tempmax": f("tempmax"),
+        "umidmed": f("umidmed"), "umidmin": f("umidmin"), "umidmax": f("umidmax"),
+        "Rt": f("Rt", 2), "p_inc100k": f("p_inc100k", 2),
+        "nivel": int(nivel) if nivel is not None else None,
+        "transmissao": row.get("transmissao"),
+    }
+
+def get_regional_model(region, disease, H=3, algo="sarima"):
+    key = (region, disease, H, algo)
     with _lock:
         if key in _regional_model:
             return _regional_model[key]
 
     agg = get_regional_aggregate(region, disease)
-    print(f"  \033[36m[sarima]\033[0m Ajustando {region}/{disease} ({len(agg['cases'])} obs)…")
-    t0     = time.time()
-    result = sarima_forecast(agg["cases"], H=H)
-    elapsed = round(time.time()-t0,1)
-    print(f"  \033[32m[ok]\033[0m {result['model']} · AIC {result['aic']} · {elapsed}s")
+    print(f"  \033[36m[{algo}]\033[0m Ajustando {region}/{disease} ({len(agg['cases'])} obs)…")
 
     last_se = agg["ses"][-1]
     fses = []
@@ -298,26 +478,44 @@ def get_regional_model(region, disease, H=12):
         last_se = next_se(last_se)
         fses.append(last_se)
 
+    exog, exog_future, exog_vars = _build_exog(agg, fses)
+
+    t0 = time.time()
+    if algo == "xgboost":
+        result = xgboost_forecast(agg, fses, H=H)
+        if result is None:
+            print(f"  \033[33m[aviso]\033[0m dados insuficientes p/ XGBoost — usando SARIMA")
+            result = sarima_forecast(agg["cases"], H=H, exog=exog, exog_future=exog_future)
+    else:
+        result = sarima_forecast(agg["cases"], H=H, exog=exog, exog_future=exog_future)
+    elapsed = round(time.time()-t0,1)
+    nota = f" · exógenas: {', '.join(exog_vars)}" if exog_vars else " · sem variáveis climáticas"
+    print(f"  \033[32m[ok]\033[0m {result['model']} · AIC {result['aic']} · {elapsed}s{nota}")
+
     payload = {**result, "ses": agg["ses"], "fses": fses,
-               "city_se": agg["city_se"], "region_cases": agg["cases"]}
+               "city_se": agg["city_se"], "region_cases": agg["cases"],
+               "exog_vars": exog_vars, "city_latest": agg.get("city_latest", {}),
+               "se_date": agg.get("se_date", {})}
     with _lock:
         _regional_model[key] = payload
     return payload
 
-def build_city_payload(geocode, disease, region, H=12):
-    key = (geocode, disease, H)
+def build_city_payload(geocode, disease, region, H=3, algo="sarima"):
+    key = (geocode, disease, H, algo)
     with _lock:
         if key in _city_fc_cache:
             return _city_fc_cache[key]
 
-    mdl         = get_regional_model(region, disease, H)
+    mdl         = get_regional_model(region, disease, H, algo)
     ses         = mdl["ses"]
     reg_cases   = mdl["region_cases"]
     city_se     = mdl["city_se"]
+    city_latest = mdl.get("city_latest", {})
 
     # Histórico da cidade
     gc_str      = str(geocode)
     city_cases  = [city_se.get(gc_str, {}).get(se, 0) for se in ses]
+    latest_row  = city_latest.get(gc_str)
 
     # Verificação: cidade encontrada nos dados regionais?
     if sum(city_cases) == 0:
@@ -330,6 +528,8 @@ def build_city_payload(geocode, disease, region, H=12):
                 cas = max(0, round(float(row.get("casos_est") or row.get("casos") or 0)))
                 if se in mdl.get("ses_set", set(ses)):
                     city_cases[ses.index(se) if se in ses else -1] = cas
+            if raw:
+                latest_row = max(raw, key=lambda r: int(r["SE"]))
         except Exception:
             pass
 
@@ -345,14 +545,32 @@ def build_city_payload(geocode, disease, region, H=12):
     lo = [max(0, int(round(v * prop))) for v in mdl["lo"]]
     hi = [max(0, int(round(v * prop))) for v in mdl["hi"]]
 
+    # Datas reais (data_iniSE da InfoDengue) — histórico + projeção p/ semanas futuras
+    se_date    = mdl.get("se_date", {})
+    hist_dates = []
+    for s in ses:
+        ms = se_date.get(s)
+        try:
+            hist_dates.append(datetime.datetime.utcfromtimestamp(ms/1000).strftime("%Y-%m-%d") if ms is not None else None)
+        except Exception:
+            hist_dates.append(None)
+    last_date_str = next((d for d in reversed(hist_dates) if d), None)
+    if last_date_str:
+        d0 = datetime.date.fromisoformat(last_date_str)
+        fdates = [(d0 + datetime.timedelta(weeks=i+1)).isoformat() for i in range(len(mdl["fses"]))]
+    else:
+        fdates = [None] * len(mdl["fses"])
+
     out = {
-        "historical": [{"SE": s, "casos": c} for s, c in zip(ses, city_cases)],
-        "fc": fc, "lo": lo, "hi": hi, "fses": mdl["fses"],
+        "historical": [{"SE": s, "casos": c, "date": d} for s, c, d in zip(ses, city_cases, hist_dates)],
+        "fc": fc, "lo": lo, "hi": hi, "fses": mdl["fses"], "fdates": fdates,
         "model":  mdl["model"],
         "region": region,
         "prop":   round(prop, 4),
         "aic":    mdl["aic"], "bic": mdl.get("bic"),
         "r2":     mdl.get("r2"), "rmse": mdl.get("rmse"), "mae": mdl.get("mae"),
+        "exog_vars": mdl.get("exog_vars", []),
+        "clima": _clima_info(latest_row),
     }
     with _lock:
         _city_fc_cache[key] = out
@@ -406,11 +624,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not HAS_SARIMA:
             return self._json(503, {"erro":"statsmodels não instalado.","fix":"pip install statsmodels numpy"})
 
-        qs  = urllib.parse.parse_qs(raw_path.split("?",1)[-1] if "?" in raw_path else "")
-        gc  = qs.get("geocode",[""])[0]
-        dis = qs.get("disease",["dengue"])[0]
-        H   = int(qs.get("H",["12"])[0])
-        reg = qs.get("region",[""])[0]
+        qs   = urllib.parse.parse_qs(raw_path.split("?",1)[-1] if "?" in raw_path else "")
+        gc   = qs.get("geocode",[""])[0]
+        dis  = qs.get("disease",["dengue"])[0]
+        H    = max(1, min(3, int(qs.get("H",["3"])[0])))  # horizonte limitado a 3 semanas
+        reg  = qs.get("region",[""])[0]
+        algo = qs.get("algo",["sarima"])[0]
+        if algo == "xgboost" and not HAS_XGB:
+            return self._json(503, {"erro":"xgboost não instalado.","fix":"pip install xgboost"})
+        if algo not in ("sarima", "xgboost"):
+            algo = "sarima"
 
         if not gc:
             return self._json(400, {"erro":"geocode obrigatorio"})
@@ -420,7 +643,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(422, {"erro":f"Cidade {gc} não mapeada a nenhuma região SP"})
 
         try:
-            payload = build_city_payload(gc, dis, reg, H)
+            payload = build_city_payload(gc, dis, reg, H, algo)
             return self._json(200, payload)
         except Exception as e:
             tb = traceback.format_exc()
@@ -494,7 +717,8 @@ def main():
     os.chdir(base)
     if not os.path.exists(HTML):
         print(f"\n  [ERRO] '{HTML}' não encontrado em {base}\n"); sys.exit(1)
-    sm = "\033[32minstalado\033[0m" if HAS_SARIMA else "\033[31mNÃO instalado — pip install statsmodels numpy\033[0m"
+    sm  = "\033[32minstalado\033[0m" if HAS_SARIMA else "\033[31mNÃO instalado — pip install statsmodels numpy\033[0m"
+    xgb = "\033[32minstalado\033[0m" if HAS_XGB else "\033[33mNÃO instalado — pip install xgboost\033[0m"
     print()
     print("  ┌──────────────────────────────────────────────┐")
     print("  │   Dashboard  Dengue · Chikungunya · Zika     │")
@@ -504,6 +728,7 @@ def main():
     print("  │   Ctrl+C para encerrar                       │")
     print("  └──────────────────────────────────────────────┘")
     print(f"\n  statsmodels : {sm}")
+    print(f"  xgboost     : {xgb}")
     print("\n  Testando conectividade…")
     testar()
     print("\n  \033[33mNota:\033[0m 1ª busca por região agrega ~30-90 cidades em paralelo (10-30s).\n")

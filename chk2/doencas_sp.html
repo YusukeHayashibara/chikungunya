@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dengue · Chikungunya · Zika — São Paulo</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
@@ -12,18 +12,18 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg0:#ffffff;
-  --bg1:#fffcf8;
-  --bg2:#fdeede;
-  --b0:rgba(160,80,10,.07);
-  --b1:rgba(160,80,10,.15);
-  --b2:rgba(160,80,10,.30);
-  --t0:#1a1208;
-  --t1:#5a3c20;
-  --t2:#a07850;
-  --acc:#ea580c;
+  --bg1:#f3f8ff;
+  --bg2:#dbeafe;
+  --b0:rgba(30,64,175,.07);
+  --b1:rgba(30,64,175,.15);
+  --b2:rgba(30,64,175,.30);
+  --t0:#0f172a;
+  --t1:#334155;
+  --t2:#64748b;
+  --acc:#2563eb;
   --r:8px;--rl:12px;
 }
-html,body{height:100%;background:var(--bg2);font-family:'IBM Plex Mono',monospace;-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:var(--bg2);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
 body{display:flex;align-items:center;justify-content:center;padding:14px;min-height:100%}
 #app{
   width:100%;max-width:1360px;
@@ -52,7 +52,7 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
   color:var(--t2);background:transparent;text-align:center;
   transition:all .12s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.rgc.a{background:#fff7ed;border-color:var(--acc);color:var(--acc);font-weight:500}
+.rgc.a{background:#eff6ff;border-color:var(--acc);color:var(--acc);font-weight:500}
 .rgc:hover:not(.a){border-color:var(--b1);color:var(--t1)}
 /* search */
 .srch{padding:9px 10px;border-bottom:.5px solid var(--b0);position:relative;z-index:20;flex-shrink:0}
@@ -69,7 +69,7 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
 .ddi{padding:5px 10px;font-size:11px;color:var(--t1);cursor:pointer;
      border-bottom:.5px solid var(--b0);display:flex;justify-content:space-between;align-items:center}
 .ddi:last-child{border-bottom:none}
-.ddi:hover{background:#fff7ed;color:var(--t0)}
+.ddi:hover{background:#eff6ff;color:var(--t0)}
 .ddi-rg{font-size:8px;color:var(--t2);flex-shrink:0;margin-left:6px}
 /* stats */
 .sc{display:none;flex-shrink:0;border-bottom:.5px solid var(--b0)}
@@ -79,18 +79,22 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
 .sv:nth-child(3),.sv:nth-child(4){border-bottom:none}
 .svl{font-size:7px;letter-spacing:.17em;color:var(--t2);margin-bottom:2px}
 .svv{font-size:13px;font-weight:500;transition:color .2s}
+/* env card (clima/população) — grid de 6 itens, sobrepõe o corte de borda do .sc de 4 itens */
+#ec .sv:nth-child(3),#ec .sv:nth-child(4){border-bottom:.5px solid var(--b0)}
+#ec .sv:nth-child(5),#ec .sv:nth-child(6){border-bottom:none}
+#ec .svv{font-size:12px}
 /* map */
-.mw{flex:1;min-height:0;position:relative;overflow:hidden;background:#fef3e2}
+.mw{flex:1;min-height:0;position:relative;overflow:hidden;background:#eaf2fb}
 #msv{width:100%;height:100%;display:block}
 .mpl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-     font-size:8px;letter-spacing:.2em;color:#d4a070}
+     font-size:8px;letter-spacing:.2em;color:#93b4dd}
 .mtg{display:none;position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
-     background:rgba(255,247,237,.96);border:.5px solid var(--acc);color:var(--acc);
+     background:rgba(239,246,255,.96);border:.5px solid var(--acc);color:var(--acc);
      font-size:8px;padding:3px 10px;letter-spacing:.1em;border-radius:3px;white-space:nowrap}
 .mtg.o{display:block}
 /* region tag on map */
 .mrt{display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
-     background:rgba(255,247,237,.9);border:.5px solid rgba(234,88,12,.35);color:rgba(234,88,12,.75);
+     background:rgba(239,246,255,.9);border:.5px solid rgba(37,99,235,.35);color:rgba(37,99,235,.75);
      font-size:7px;padding:2px 8px;letter-spacing:.12em;border-radius:3px;white-space:nowrap}
 .mrt.o{display:block}
 /* metrics bar */
@@ -148,7 +152,7 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
   <header class="hdr">
     <div class="hdot" id="hdot"></div>
     <span class="ht" id="htitle">CHIKUNGUNYA · SÃO PAULO</span>
-    <span class="hb">INFODENGUE · SARIMA / HOLT-WINTERS · IC 90%</span>
+    <span class="hb">INFODENGUE · SARIMA / XG Boost </span>
   </header>
   <div class="body">
     <!-- ── LEFT ── -->
@@ -178,8 +182,16 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
       <div class="sc" id="sc">
         <div class="sv"><div class="svl">TOTAL CASOS</div><div class="svv" id="s0">–</div></div>
         <div class="sv"><div class="svl">PICO SEMANAL</div><div class="svv" id="s1">–</div></div>
-        <div class="sv"><div class="svl">PREV. 12 SEM.</div><div class="svv" id="s2">–</div></div>
+        <div class="sv"><div class="svl">PREV. 3 SEM.</div><div class="svv" id="s2">–</div></div>
         <div class="sv"><div class="svl">PICO PREVISTO</div><div class="svv" id="s3">–</div></div>
+      </div>
+      <div class="sc" id="ec">
+        <div class="sv"><div class="svl">POPULAÇÃO</div><div class="svv" id="c-pop">–</div></div>
+        <div class="sv"><div class="svl">TEMP. MÉDIA</div><div class="svv" id="c-temp">–</div></div>
+        <div class="sv"><div class="svl">UMID. MÉDIA</div><div class="svv" id="c-umid">–</div></div>
+        <div class="sv"><div class="svl">Rt (TRANSMISSÃO)</div><div class="svv" id="c-rt">–</div></div>
+        <div class="sv"><div class="svl">INCID. /100K HAB</div><div class="svv" id="c-inc">–</div></div>
+        <div class="sv"><div class="svl">NÍVEL DE ALERTA</div><div class="svv" id="c-nivel">–</div></div>
       </div>
       <div class="mw" id="mw">
         <div class="mpl" id="mpl">CARREGANDO…</div>
@@ -202,6 +214,10 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
       <div class="cv" id="cv">
         <div class="cr">
           <div class="cn" id="cn"></div>
+          <div class="rtabs" id="algotabs">
+            <button class="rtab a" data-algo="sarima">SARIMA</button>
+            <button class="rtab"   data-algo="xgboost">XGBOOST</button>
+          </div>
           <div class="rtabs" id="rtabs">
             <button class="rtab"   data-w="52">1A</button>
             <button class="rtab a" data-w="104">2A</button>
@@ -213,9 +229,9 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
         <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-bottom:5px">
           <div class="csub" id="csub"></div>
           <div class="leg">
-            <div class="li"><div class="lb" id="lcol" style="background:#ea580c"></div><span>histórico</span></div>
-            <div class="li"><div style="width:16px;border-top:2px dashed #c2410c"></div><span>previsão</span></div>
-            <div class="li"><div class="lb" style="background:rgba(234,88,12,.2);height:8px;border-radius:2px"></div><span>IC 90%</span></div>
+            <div class="li"><div class="lb" id="lcol" style="background:#2563eb"></div><span>histórico</span></div>
+            <div class="li"><div style="width:16px;border-top:2px dashed #1d4ed8"></div><span>previsão</span></div>
+            <div class="li"><div class="lb" style="background:rgba(37,99,235,.2);height:8px;border-radius:2px"></div><span>IC 90%</span></div>
           </div>
         </div>
         <div class="mbar" id="mbar">
@@ -239,17 +255,17 @@ body{display:flex;align-items:center;justify-content:center;padding:14px;min-hei
 'use strict';
 const $=id=>document.getElementById(id);
 const dk=()=>false;
-const dcol=()=>'#ea580c';
+const dcol=()=>'#2563eb';
 
 let munis=[],chartInst=null,proj=null,gpath=null;
-let curMuni=null,curDisease='chikungunya',curRegiao='',curRgid='';
-let _fullHl=[],_fullHd=[],_fullFl=[],_fullFd=[],_fullLo=[],_fullHi=[];
+let curMuni=null,curDisease='chikungunya',curRegiao='',curRgid='',curAlgo='sarima';
+let _fullHl=[],_fullHd=[],_fullFl=[],_fullFd=[],_fullLo=[],_fullHi=[],_fullDates=[],_fullFDates=[];
 let _winWeeks=104;
 const cache={};
 const isLocal=['localhost','127.0.0.1'].includes(location.hostname);
 
 /* ── Holt-Winters ETS (fallback browser) ── */
-function hwETS(y,H=12,m=52){
+function hwETS(y,H=3,m=52){
   const n=y.length;
   if(n<2*m){
     const a=y.reduce((s,v)=>s+v,0)/n;
@@ -283,15 +299,41 @@ function hwETS(y,H=12,m=52){
 function fmtSE(se){const s=String(se);return s.slice(2,4)+'/'+s.slice(4);}
 function nextSE(se){let y=Math.floor(se/100),w=se%100+1;if(w>52){w=1;y++;}return y*100+w;}
 function seToYear(lbl){return parseInt('20'+lbl.slice(0,2),10);}
+function fmtDatePt(iso){
+  if(!iso)return null;
+  const d=new Date(iso+'T00:00:00');
+  if(isNaN(d))return null;
+  return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
 
 /* ── Stats ── */
 function setStats(cases,fc,col){
   ['s0','s1'].forEach(id=>$(id).style.color=col);
-  ['s2','s3'].forEach(id=>$(id).style.color='#c2410c');
+  ['s2','s3'].forEach(id=>$(id).style.color='#1d4ed8');
   $('s0').textContent=cases.reduce((a,b)=>a+b,0).toLocaleString('pt-BR');
   $('s1').textContent=Math.max(...cases).toLocaleString('pt-BR');
   $('s2').textContent=fc.reduce((a,b)=>a+b,0).toLocaleString('pt-BR');
   $('s3').textContent=Math.max(...fc).toLocaleString('pt-BR');
+}
+
+/* ── Clima / população (painel esquerdo) ── */
+function setClima(row){
+  const ec=$('ec');
+  if(!row){ec.classList.remove('o');return;}
+  const num=v=>{if(v===null||v===undefined||v==='')return null;const n=+v;return Number.isFinite(n)?n:null;};
+  const pop=num(row.pop),temp=num(row.tempmed),umid=num(row.umidmed),
+        rt=num(row.Rt),inc=num(row.p_inc100k),nivel=num(row.nivel);
+  ec.classList.add('o');
+  $('c-pop').textContent  = pop!=null  ? pop.toLocaleString('pt-BR')     : '–';
+  $('c-temp').textContent = temp!=null ? temp.toFixed(1)+'°C'           : '–';
+  $('c-umid').textContent = umid!=null ? umid.toFixed(1)+'%'            : '–';
+  $('c-rt').textContent   = rt!=null   ? rt.toFixed(2)                  : '–';
+  $('c-inc').textContent  = inc!=null  ? inc.toFixed(1)                 : '–';
+  const NIVEL=['','BAIXO','MÉDIO','ALTO','MUITO ALTO'];
+  const NCOL =['','#16a34a','#d97706','#ea580c','#dc2626'];
+  const nEl=$('c-nivel');
+  nEl.textContent = nivel && NIVEL[nivel] ? NIVEL[nivel] : '–';
+  nEl.style.color = nivel && NCOL[nivel] ? NCOL[nivel] : '';
 }
 
 /* ── Metrics ── */
@@ -308,10 +350,10 @@ function setMetrics(r2, rmse, mae, aic){
   }
   const rmseEl = $('m-rmse');
   rmseEl.textContent = rmse !== null && rmse !== undefined ? rmse.toFixed(1) : '–';
-  rmseEl.style.color = '#c2410c';
+  rmseEl.style.color = '#1d4ed8';
   const maeEl = $('m-mae');
   maeEl.textContent = mae !== null && mae !== undefined ? mae.toFixed(1) : '–';
-  maeEl.style.color = '#c2410c';
+  maeEl.style.color = '#1d4ed8';
   const aicEl = $('m-aic');
   aicEl.textContent = aic !== null && aic !== undefined ? aic : '–';
   aicEl.style.color = '';
@@ -332,22 +374,23 @@ const sepPlugin={
     ctx.strokeStyle='rgba(0,0,0,.12)';
     ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(x,chartArea.top);ctx.lineTo(x,chartArea.bottom);ctx.stroke();
-    ctx.setLineDash([]);ctx.font="8px 'IBM Plex Mono',monospace";
+    ctx.setLineDash([]);ctx.font="8px 'Inter',sans-serif";
     ctx.fillStyle='rgba(0,0,0,.25)';ctx.textAlign='right';
     ctx.fillText('HOJE',x-4,chartArea.top+10);
     ctx.restore();
   }
 };
 
-function drawChart(hl,hd,fl,fd,lo,hi){
+function drawChart(hl,hd,fl,fd,lo,hi,dates=[],fdates=[]){
   if(chartInst){chartInst.destroy();chartInst=null;}
   const d=dk(),gc='rgba(0,0,0,.05)';
-  const tc='#9a8060';
-  const mf={family:"'IBM Plex Mono',monospace",size:9};
+  const tc='#6b83a8';
+  const mf={family:"'Inter',sans-serif",size:9};
   const col=dcol(),N=hl.length,H=fl.length;
   const winStart=_winWeeks>0?Math.max(0,N-_winWeeks):0;
   const hlW=hl.slice(winStart),hdW=hd.slice(winStart),NW=hlW.length;
   const all=[...hlW,...fl];
+  const allDates=[...dates.slice(winStart),...fdates];
   const hF=[...hdW,...Array(H).fill(NaN)];
   const fF=[...Array(NW).fill(NaN),...fd];
   const uF=[...Array(NW).fill(NaN),...hi];
@@ -363,14 +406,14 @@ function drawChart(hl,hd,fl,fd,lo,hi){
     type:'line',
     data:{labels:all,datasets:[
       {label:'Casos',data:hF,borderColor:col,borderWidth:1.5,pointRadius:0,tension:.2,
-       fill:{target:'origin',above:'rgba(234,88,12,.07)'},spanGaps:false,order:3},
-      {label:'IC sup',data:uF,borderColor:'rgba(234,88,12,.25)',borderWidth:.5,pointRadius:0,
-       fill:{target:'+1',above:'rgba(234,88,12,.12)'},backgroundColor:'rgba(234,88,12,.12)',
+       fill:{target:'origin',above:'rgba(37,99,235,.07)'},spanGaps:false,order:3},
+      {label:'IC sup',data:uF,borderColor:'rgba(37,99,235,.25)',borderWidth:.5,pointRadius:0,
+       fill:{target:'+1',above:'rgba(37,99,235,.12)'},backgroundColor:'rgba(37,99,235,.12)',
        tension:.35,spanGaps:false,order:1},
-      {label:'IC inf',data:lF,borderColor:'rgba(234,88,12,.25)',borderWidth:.5,
+      {label:'IC inf',data:lF,borderColor:'rgba(37,99,235,.25)',borderWidth:.5,
        pointRadius:0,fill:false,tension:.35,spanGaps:false,order:1},
-      {label:'Previsão',data:fF,borderColor:'#c2410c',borderWidth:2,borderDash:[6,3],
-       pointRadius:4,pointBackgroundColor:'#c2410c',
+      {label:'Previsão',data:fF,borderColor:'#1d4ed8',borderWidth:2,borderDash:[6,3],
+       pointRadius:4,pointBackgroundColor:'#1d4ed8',
        pointBorderColor:'#fff',pointBorderWidth:1.5,
        tension:.35,fill:false,spanGaps:false,order:2}
     ]},
@@ -387,7 +430,11 @@ function drawChart(hl,hd,fl,fd,lo,hi){
           titleColor:'#5a3c20',bodyColor:'#374151',
           titleFont:mf,bodyFont:{family:mf.family,size:11},padding:10,cornerRadius:6,
           callbacks:{
-            title:c=>{const l=c[0].label;return`Semana ${l.slice(3)}/${seToYear(l)}`;},
+            title:c=>{
+              const dt=fmtDatePt(allDates[c[0].dataIndex]);
+              if(dt)return dt;
+              const l=c[0].label;return`Semana ${l.slice(3)}/${seToYear(l)}`;
+            },
             label:c=>{if(isNaN(c.raw)||c.raw===null)return null;
               return c.dataset.label+': '+Math.round(c.raw).toLocaleString('pt-BR');}
           }
@@ -402,12 +449,23 @@ function drawChart(hl,hd,fl,fd,lo,hi){
 }
 
 /* ── Range tabs ── */
-document.querySelectorAll('.rtab').forEach(btn=>{
+document.querySelectorAll('#rtabs .rtab').forEach(btn=>{
   btn.addEventListener('click',()=>{
-    document.querySelectorAll('.rtab').forEach(b=>b.classList.remove('a'));
+    document.querySelectorAll('#rtabs .rtab').forEach(b=>b.classList.remove('a'));
     btn.classList.add('a');
     _winWeeks=parseInt(btn.dataset.w)||0;
-    if(_fullHl.length)drawChart(_fullHl,_fullHd,_fullFl,_fullFd,_fullLo,_fullHi);
+    if(_fullHl.length)drawChart(_fullHl,_fullHd,_fullFl,_fullFd,_fullLo,_fullHi,_fullDates,_fullFDates);
+  });
+});
+
+/* ── Algoritmo (SARIMA / XGBoost) ── */
+document.querySelectorAll('#algotabs .rtab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    if(btn.classList.contains('a'))return;
+    document.querySelectorAll('#algotabs .rtab').forEach(b=>b.classList.remove('a'));
+    btn.classList.add('a');
+    curAlgo=btn.dataset.algo;
+    if(curMuni)loadData();
   });
 });
 
@@ -439,7 +497,7 @@ function initMap(w,h){
       gpath=d3.geoPath(proj);
       svg.attr('viewBox',`0 0 ${w} ${h}`);
       svg.append('path').datum(geo).attr('class','sp-base')
-        .attr('d',gpath).attr('fill','#e8d5be').attr('stroke','#c4a07a').attr('stroke-width',.8);
+        .attr('d',gpath).attr('fill','#dbeafe').attr('stroke','#93c5fd').attr('stroke-width',.8);
       $('mpl').style.display='none';
       mapLoaded=true;
       if(_pendingRgid) hlRegiao(_pendingRgid, _pendingRgName);
@@ -447,7 +505,7 @@ function initMap(w,h){
     })
     .catch(e=>{
       console.error('map error:',e);
-      $('mpl').style.color='#4a90c0';
+      $('mpl').style.color='#2563eb';
       $('mpl').textContent='MAPA INDISPONÍVEL';
     });
 }
@@ -481,8 +539,8 @@ function hlRegiao(rid,name){
       if(!proj)return;
       svg.append('path').datum(geo).attr('class','rg-hl')
         .attr('d',gpath)
-        .attr('fill','rgba(245,158,11,.18)')
-        .attr('stroke','#f59e0b').attr('stroke-width',1).attr('opacity',1);
+        .attr('fill','rgba(37,99,235,.18)')
+        .attr('stroke','#2563eb').attr('stroke-width',1).attr('opacity',1);
       if(name){
         mrt.textContent=name.toUpperCase();
         mrt.classList.add('o');
@@ -504,8 +562,8 @@ function hlMuni(id,name){
       const geo=toGeo(raw);
       if(!proj)return;
       svg.append('path').datum(geo).attr('class','mh')
-        .attr('d',gpath).attr('fill','#f59e0b')
-        .attr('stroke','#fcd34d').attr('stroke-width',1.5).attr('opacity',.9);
+        .attr('d',gpath).attr('fill','#1d4ed8')
+        .attr('stroke','#60a5fa').attr('stroke-width',1.5).attr('opacity',.9);
       const t=$('mtg');t.textContent=name.toUpperCase();t.classList.add('o');
     })
     .catch(e=>console.warn('município highlight falhou:',e));
@@ -581,7 +639,7 @@ $('dd').addEventListener('mousedown',e=>{
 });
 
 /* ── Doença fixa: chikungunya ── */
-$('hdot').style.background='#ea580c';
+$('hdot').style.background='#2563eb';
 
 /* ── CORS proxy for InfoDengue ── */
 const PROXIES=[
@@ -614,24 +672,26 @@ async function loadData(){
     if(isLocal){
       const cityReg=CIDADE_REG[norm(curMuni.nome)]||'';
       $('cl').textContent=`SARIMA REGIONAL${cityReg?' — '+cityReg.toUpperCase():''}…`;
-      const r=await fetch(`/api/forecast?geocode=${curMuni.id}&disease=${curDisease}&H=12&region=${encodeURIComponent(cityReg)}`);
+      const r=await fetch(`/api/forecast?geocode=${curMuni.id}&disease=${curDisease}&H=3&algo=${curAlgo}&region=${encodeURIComponent(cityReg)}`);
       const d=await r.json();
       if(!r.ok||d.erro)throw new Error(d.erro||(d.fix?d.fix:`HTTP ${r.status}`));
-      const{historical,fc,lo,hi,fses,model,aic}=d;
+      const{historical,fc,lo,hi,fses,fdates,model,aic}=d;
       const hl=historical.map(x=>fmtSE(x.SE));
       const cases=historical.map(x=>x.casos);
+      const dates=historical.map(x=>x.date);
       const fl=fses.map(se=>fmtSE(se));
       const regionLabel = d.region ? ` · Região: ${d.region}` : '';
-      $('csub').textContent=`${model} · AIC ${aic}${regionLabel} · 2017–2026 + PREVISÃO 12 SEM. (IC 90%)`;
+      $('csub').textContent=`${model} · AIC ${aic}${regionLabel} · 2017–2026 + PREVISÃO 3 SEM. (IC 90%)`;
       $('cl').style.display='none';
-      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;
-      drawChart(hl,cases,fl,fc,lo,hi);
+      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;_fullDates=dates;_fullFDates=fdates||[];
+      drawChart(hl,cases,fl,fc,lo,hi,dates,fdates||[]);
       setStats(cases,fc,col);
       setMetrics(d.r2, d.rmse, d.mae, d.aic);
+      setClima(d.clima);
       $('sc').classList.add('o');
       $('dlbtn')._d={sorted:historical.map(x=>({SE:x.SE,casos_est:x.casos})),fc,fl,lo,hi};
     }else{
-      $('csub').textContent=`${curDisease.toUpperCase()} · HOLT-WINTERS ETS · 2017–2026 + PREVISÃO 12 SEM. (IC 90%)`;
+      $('csub').textContent=`${curDisease.toUpperCase()} · HOLT-WINTERS ETS · 2017–2026 + PREVISÃO 3 SEM. (IC 90%)`;
       const key=`${curMuni.id}_${curDisease}`;
       let data=cache[key];
       if(!data){
@@ -642,12 +702,20 @@ async function loadData(){
       const sorted=data.sort((a,b)=>a.SE-b.SE);
       const hl=sorted.map(d=>fmtSE(d.SE));
       const cases=sorted.map(d=>Math.max(0,Math.round(+(d.casos_est||d.casos||0))));
+      const dates=sorted.map(d=>d.data_iniSE?new Date(d.data_iniSE).toISOString().slice(0,10):null);
       const{fc,lo,hi}=hwETS(cases);
       let lastSE=sorted[sorted.length-1].SE;
-      const fl=fc.map(()=>{lastSE=nextSE(lastSE);return fmtSE(lastSE);});
+      let lastDateIso=dates[dates.length-1];
+      const fdates=[];
+      const fl=fc.map(()=>{
+        lastSE=nextSE(lastSE);
+        if(lastDateIso){const dt=new Date(lastDateIso+'T00:00:00');dt.setDate(dt.getDate()+7);lastDateIso=dt.toISOString().slice(0,10);}
+        fdates.push(lastDateIso);
+        return fmtSE(lastSE);
+      });
       $('cl').style.display='none';
-      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;
-      drawChart(hl,cases,fl,fc,lo,hi);
+      _fullHl=hl;_fullHd=cases;_fullFl=fl;_fullFd=fc;_fullLo=lo;_fullHi=hi;_fullDates=dates;_fullFDates=fdates;
+      drawChart(hl,cases,fl,fc,lo,hi,dates,fdates);
       setStats(cases,fc,col);
       (()=>{
         const n=cases.length, m=52;
@@ -674,6 +742,7 @@ async function loadData(){
         const r2=ssTot>0?1-ssRes/ssTot:null;
         setMetrics(r2?parseFloat(r2.toFixed(4)):null,parseFloat(rmse.toFixed(4)),parseFloat(mae.toFixed(4)),null);
       })();
+      setClima(sorted[sorted.length-1]);
       $('sc').classList.add('o');
       $('dlbtn')._d={sorted,fc,fl,lo,hi};
     }
